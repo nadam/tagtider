@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2010 Adam Nybäck
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+  
+          http://www.apache.org/licenses/LICENSE-2.0
+  
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="fill_parent"
+  android:layout_height="wrap_content"
+  android:orientation="vertical">
+
+    <TextView
+      android:id="@+id/title"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:text="Ankomster  "
+      android:textAppearance="@style/screen_title"
+      android:padding="@dimen/padding"
+      android:background="#333"
+    />
+
+    <LinearLayout
+      xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:background="@color/title_background"
+      android:padding="@dimen/padding"
+      >
+        <TextView
+          android:id="@+id/time"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:text="Tid  "
+          android:textAppearance="@style/train_title"
+          android:padding="@dimen/padding"
+        />
+        <TextView
+          android:id="@+id/place"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:text="Till"
+          android:layout_weight="1"
+          android:textAppearance="@style/train_title"
+          android:padding="@dimen/padding"
+        />
+        
+        <TextView
+          android:id="@+id/track"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:text="Spår"
+          android:textAppearance="@style/train_title"
+          android:padding="@dimen/padding"
+        />
+                
+    </LinearLayout>
+
+    <ListView
+      android:id="@android:id/list"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:orientation="vertical"
+    />
+      
+    <TextView
+      android:id="@android:id/empty"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:text="@string/no_transfers"
+      android:textAppearance="@style/train"
+      android:padding="@dimen/padding"
+    />
+
+</LinearLayout>

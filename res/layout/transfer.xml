@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2010 Adam Nybäck
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+  
+          http://www.apache.org/licenses/LICENSE-2.0
+  
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="fill_parent"
+  android:layout_height="fill_parent"
+  android:orientation="vertical"
+  android:background="#000">
+  
+    <TextView
+      android:id="@+id/train"
+      android:layout_marginBottom="6dp"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:layout_gravity="center"
+      android:text="Tåg 123 (SJ Regional)"
+      android:textAppearance="@style/screen_title"
+      android:padding="@dimen/padding"
+      android:background="#444"
+    />
+
+    <LinearLayout
+      android:id="@+id/origin_group"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:orientation="vertical">
+        <TextView
+          android:id="@+id/origin"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_gravity="center"
+          android:gravity="center"
+          android:text="Från Bangkok"
+          android:textAppearance="@style/city"
+          android:padding="@dimen/padding"
+        />
+    
+        <TextView
+          android:id="@+id/arrival"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_gravity="center"
+          android:gravity="center"
+          android:text="Ankommer 12:59 12:12"
+          android:textAppearance="@style/transfer_time"
+          android:padding="@dimen/padding"
+        />
+    </LinearLayout>
+
+    <TextView
+      android:id="@+id/station_track"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_gravity="center"
+      android:gravity="center"
+      android:text="Stockholm C, spår 15"
+      android:textAppearance="@style/city"
+      android:padding="@dimen/padding"
+    />
+
+    <LinearLayout
+      android:id="@+id/destination_group"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:orientation="vertical">
+
+        <TextView
+          android:id="@+id/departure"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_gravity="center"
+          android:gravity="center"
+          android:text="Avgår 13:05"
+          android:textAppearance="@style/transfer_time"
+          android:padding="@dimen/padding"
+        />
+
+        <TextView
+          android:id="@+id/destination"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_gravity="center"
+          android:gravity="center"
+          android:text="Till Singapore"
+          android:textAppearance="@style/city"
+          android:padding="@dimen/padding"
+        />
+    </LinearLayout>
+    
+    <TextView
+      android:id="@+id/comment"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:layout_gravity="center"
+      android:gravity="center"
+      android:text="Kommentar"
+      android:textAppearance="@style/transfer_time"
+      android:padding="@dimen/padding"
+    />
+    
+    <TextView
+      android:id="@+id/changes"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:text="Ändringar"
+      android:textAppearance="@style/screen_title"
+      android:padding="@dimen/padding"
+      android:background="#444"
+    />
+    
+    <ListView
+      android:id="@android:id/list"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:orientation="vertical"
+    />
+      
+    <TextView
+      android:id="@android:id/empty"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:text="@string/no_changes"
+      android:textAppearance="@style/ticket"
+      android:padding="@dimen/padding"
+    />
+    
+    <Button
+      android:id="@+id/sms"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_gravity="center"
+      android:textAppearance="?android:attr/textAppearanceMedium"
+      android:text="@string/sms_button"/>
+</LinearLayout>

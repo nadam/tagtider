@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2010 Adam Nybäck
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+  
+          http://www.apache.org/licenses/LICENSE-2.0
+  
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+
+<resources>
+    <string name="hello">Hello World, MainActivity!</string>
+    <string name="app_name">Tågtider</string>
+    
+    <string name="no_transfers">Hittar inga transfers</string>
+    <string name="no_changes">Inga ändringar ännu</string>
+    
+    <string name="sms_button">SMS-bevakning...</string>
+    <string name="sms_dialog_title">SMS-bevakning</string>
+    <string name="sms_dialog_message">Kostar inte mer än ett SMS och gör att du får SMS skickat till dig om någon ändring rapporteras.</string>
+</resources>
