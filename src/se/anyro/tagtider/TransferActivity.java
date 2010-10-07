@@ -84,6 +84,13 @@ public class TransferActivity extends ListActivity {
 		
 		setContentView(R.layout.transfer);
 		
+		setupTransferData(getIntent().getExtras());
+		
+		mProgress = new ProgressDialog(this);
+		mDialog = new AlertDialog.Builder(this).setNeutralButton("Ok", null).create();
+	}
+
+	private void setupTransferData(final Bundle extras) {
 		TextView trainView = (TextView) findViewById(R.id.train);
 		
 		ViewGroup originGroup = (ViewGroup) findViewById(R.id.origin_group);
@@ -99,9 +106,6 @@ public class TransferActivity extends ListActivity {
 		TextView commentView = (TextView) findViewById(R.id.comment);
 		mEmptyView = (TextView) findViewById(android.R.id.empty);
 		
-		Intent intent = getIntent();
-		final Bundle extras = intent.getExtras();
-		
 		trainView.setText("Tåg " + extras.getString("train") + " (" + extras.getString("type") + ")");
 
 		String origin = extras.getString("origin");
@@ -113,7 +117,7 @@ public class TransferActivity extends ListActivity {
 		}
 
 		String track = extras.getString("track");
-		if (track == null || track.equalsIgnoreCase("x"))
+		if (track == null || track.equalsIgnoreCase("x") || track.equalsIgnoreCase("null"))
 			track = "";
 		
 		String arrival = extras.getString("arrival");
@@ -171,21 +175,9 @@ public class TransferActivity extends ListActivity {
 			commentView.setVisibility(View.GONE);
 		}
 		
-		new FetchChangesTask().execute(extras.getString("id"));
-		
-		AlertDialog.Builder builder = new AlertDialog.Builder(this);
-		builder.setTitle(R.string.sms_dialog_title);
-		builder.setMessage(R.string.sms_dialog_message);
-		builder.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
-			String train = extras.getString("train");
-			String station = extras.getString("station");
-			@Override
-			public void onClick(DialogInterface dialog, int which) {
-				sendSms("0730121096", train + " " + station);
-			}
-		});
-		builder.setNegativeButton("Avbryt", null);
-		final AlertDialog smsDialog = builder.create();
+		final String train = extras.getString("train");
+		final String station = extras.getString("station");
+		final AlertDialog smsDialog = createSmsDialog(train, station);
 		
 		Button sendSmsButton = (Button) findViewById(R.id.sms);
 		sendSmsButton.setOnClickListener(new OnClickListener() {
@@ -194,9 +186,24 @@ public class TransferActivity extends ListActivity {
 				smsDialog.show();
 			}
 		});
-		
-		mProgress = new ProgressDialog(this);
-		mDialog = new AlertDialog.Builder(this).setNeutralButton("Ok", null).create();
+
+		// Fetch additional data about changes made to this transfer
+		new FetchChangesTask().execute(extras.getString("id"));
+	}
+
+	private AlertDialog createSmsDialog(final String train, final String station) {
+		AlertDialog.Builder builder = new AlertDialog.Builder(this);
+		builder.setTitle(R.string.sms_dialog_title);
+		builder.setMessage(R.string.sms_dialog_message);
+		builder.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
+			@Override
+			public void onClick(DialogInterface dialog, int which) {
+				sendSms("0730121096", train + " " + station);
+			}
+		});
+		builder.setNegativeButton("Avbryt", null);
+		final AlertDialog smsDialog = builder.create();
+		return smsDialog;
 	}	
 	
 	private void addAdapter() {
@@ -216,6 +223,9 @@ public class TransferActivity extends ListActivity {
         setListAdapter(mChangesAdapter);
 	}
 	
+    /**
+     * Class for fetching transfer changes asynchronously
+     */
     private class FetchChangesTask extends AsyncTask<String, String, String> {
 
     	@Override
@@ -232,55 +242,61 @@ public class TransferActivity extends ListActivity {
 			
 			try {
 				HttpResponse response = Http.getClient().execute(httpGet);
-				if (response.getStatusLine().getStatusCode() == 200) {
-					HttpEntity entity = response.getEntity();
-					InputStream content = entity.getContent();
-					
-					String json = StringUtils.readTextFile(content);
-					try {
-						JSONObject root = new JSONObject(json);
-						JSONObject transfer = root.getJSONObject("transfer");
-						if (!transfer.has("changes"))
-							return "Inga ändringar ännu";
-						JSONArray changes = transfer.getJSONObject("changes").getJSONArray("change");
+				int statusCode = response.getStatusLine().getStatusCode();
+				if (statusCode != 200)
+					return "Tillfälligt fel " + statusCode + " :-(";
 
-						for (int i = 0; i < changes.length(); ++i) {
-							JSONObject change = changes.getJSONObject(i);
-							@SuppressWarnings("unchecked")
-							Iterator keys = change.keys();
-							Map<String, Object> changeMap = new HashMap<String, Object>();
-							while (keys.hasNext()) {
-								Object key = keys.next();
-								Object value = change.get((String) key);
-								if (value == JSONObject.NULL)
-									value = null;
-								changeMap.put((String) key, value);
-							}
-							
-							String track = change.getString("track");
-							if (track.length() > 0)
-								track = "Spår " + track;
-							
-							String arrival = change.getString("arrival");
-							if (arrival.length() > 0 && arrival.charAt(0) != '0')
-								arrival = "Ankommer " + StringUtils.extractTime(arrival);
-							else
-								arrival = "";
-							
-							String departure = change.getString("departure");
-							if (departure.length() > 0 && departure.charAt(0) != '0')
-								departure = "Avgår " + StringUtils.extractTime(departure);
-							else
-								departure = "";
-							
-							String[] other = new String[]{track, arrival, departure};
-							changeMap.put("other", StringUtils.join(other, ", "));
-							mChanges.add(changeMap);
+				HttpEntity entity = response.getEntity();
+				InputStream content = entity.getContent();
+				
+				String json = StringUtils.readTextFile(content);
+				try {
+					// Parse json response into objects
+					JSONObject root = new JSONObject(json);
+					
+					JSONObject transfer = root.getJSONObject("transfer");
+					if (!transfer.has("changes"))
+						return "Inga ändringar ännu";
+					JSONArray changes = transfer.getJSONObject("changes").getJSONArray("change");
+
+					for (int i = 0; i < changes.length(); ++i) {
+						JSONObject change = changes.getJSONObject(i);
+						@SuppressWarnings("unchecked")
+						Iterator keys = change.keys();
+						Map<String, Object> changeMap = new HashMap<String, Object>();
+						while (keys.hasNext()) {
+							Object key = keys.next();
+							Object value = change.get((String) key);
+							if (value == JSONObject.NULL)
+								value = null;
+							changeMap.put((String) key, value);
 						}
-						return null;
-					} catch (JSONException e) {
-						return "Tillfälligt fel i svaret";
+						
+						String track = change.getString("track");
+						if (track.length() > 0 &&  !track.equalsIgnoreCase("null"))
+							track = "Spår " + track;
+						else
+							track = "";
+						
+						String arrival = change.getString("arrival");
+						if (arrival.length() > 0 && arrival.charAt(0) == '2')
+							arrival = "Ankommer " + StringUtils.extractTime(arrival);
+						else
+							arrival = "";
+						
+						String departure = change.getString("departure");
+						if (departure.length() > 0 && departure.charAt(0) == '2')
+							departure = "Avgår " + StringUtils.extractTime(departure);
+						else
+							departure = "";
+						
+						String[] other = new String[]{track, arrival, departure};
+						changeMap.put("other", StringUtils.join(other, ", "));
+						mChanges.add(changeMap);
 					}
+					return null;
+				} catch (JSONException e) {
+					return "Tillfälligt fel";
 				}
 
 			} catch (ClientProtocolException e) {
@@ -288,7 +304,6 @@ public class TransferActivity extends ListActivity {
 			} catch (IOException e) {
 				return "Ingen kontakt";
 			}
-			return null;
 		}
 		
 		@Override
