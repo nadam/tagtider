@@ -144,4 +144,20 @@
       android:layout_gravity="center"
       android:textAppearance="?android:attr/textAppearanceMedium"
       android:text="@string/sms_button"/>
+
+    <!--Button
+      android:id="@+id/call"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_gravity="center"
+      android:textAppearance="?android:attr/textAppearanceMedium"
+      android:text="Ring..."/>
+
+    <Button
+      android:id="@+id/web"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_gravity="center"
+      android:textAppearance="?android:attr/textAppearanceMedium"
+      android:text="Till..."/-->
 </LinearLayout>

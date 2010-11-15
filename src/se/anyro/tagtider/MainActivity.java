@@ -41,6 +41,8 @@ import android.app.ListActivity;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.AssetManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -81,6 +83,8 @@ public class MainActivity extends ListActivity {
 		setupButtonActions();
 		setupDialogs();
 		loadRecentStations();
+		
+		Http.setVersionName(getVersionName());
     }
 
 	private void loadStations() {
@@ -184,6 +188,7 @@ public class MainActivity extends ListActivity {
 			String type = params[1];
 			
 			HttpGet httpGet = new HttpGet("http://api.tagtider.net/v1/stations/" + stationId + "/transfers/" + type + ".json");
+			httpGet.setHeader("User-Agent", Http.getUserAgent());
 			
 			try {
 				HttpResponse response = Http.getClient().execute(httpGet);
@@ -257,5 +262,14 @@ public class MainActivity extends ListActivity {
 	public void showMessage(String message) {
 		mMessageDialog.setMessage(message);
 		mMessageDialog.show();
+	}
+
+	private String getVersionName() {
+		try {
+			PackageInfo mPackageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+			return mPackageInfo.versionName;
+		} catch (NameNotFoundException e) {
+			return "UNAVAILABLE";
+		}
 	}
 }

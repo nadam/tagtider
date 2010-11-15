@@ -239,6 +239,7 @@ public class TransferActivity extends ListActivity {
 			String transferId = params[0];
 			
 			HttpGet httpGet = new HttpGet("http://api.tagtider.net/v1/transfers/" + transferId + ".json");
+			httpGet.setHeader("User-Agent", Http.getUserAgent());
 			
 			try {
 				HttpResponse response = Http.getClient().execute(httpGet);
@@ -376,9 +377,9 @@ public class TransferActivity extends ListActivity {
 		}
     }
 	
-	public void showMessage(String title, String message) {
+	private void showMessage(String title, String message) {
 		mDialog.setTitle(title);
 		mDialog.setMessage(message);
 		mDialog.show();
-	}    
+	}
 }

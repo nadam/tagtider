@@ -26,7 +26,9 @@ import org.apache.http.impl.client.DefaultHttpClient;
  */
 public class Http {
 	
+	private static final String APP_NAME = "Tagtider Android Client";
 	private static DefaultHttpClient client;
+	private static String userAgent = APP_NAME;
 	
 	public static DefaultHttpClient getClient() {
 		if (client == null) {
@@ -36,5 +38,13 @@ public class Http {
 			client.getCredentialsProvider().setCredentials(scope, creds);
 		}
 		return client;
+	}
+	
+	public static void setVersionName(String versionName) {
+		userAgent = APP_NAME + "/" + versionName;
+	}
+	
+	public static String getUserAgent() {
+		return userAgent;
 	}
 }
