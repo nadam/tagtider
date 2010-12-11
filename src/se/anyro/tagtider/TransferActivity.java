@@ -206,6 +206,21 @@ public class TransferActivity extends ListActivity {
 		return smsDialog;
 	}	
 	
+	private AlertDialog createNotificationDialog(final String train, final String station) {
+		AlertDialog.Builder builder = new AlertDialog.Builder(this);
+		builder.setTitle(R.string.sms_dialog_title);
+		builder.setMessage(R.string.sms_dialog_message);
+		builder.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
+			@Override
+			public void onClick(DialogInterface dialog, int which) {
+				sendSms("0730121096", train + " " + station);
+			}
+		});
+		builder.setNegativeButton("Avbryt", null);
+		final AlertDialog smsDialog = builder.create();
+		return smsDialog;
+	}
+	
 	private void addAdapter() {
         mChangesAdapter = new SimpleAdapter(this, mChanges, R.layout.change_row, FROM, TO);
         mChangesAdapter.setViewBinder(new ViewBinder() {

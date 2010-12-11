@@ -40,6 +40,12 @@ import android.widget.SimpleAdapter.ViewBinder;
  */
 public class StationActivity extends ListActivity {
 
+	private static final int BG_COLOR_DEFAULT = 0xff000000;
+	private static final int BG_COLOR_DELAYED = 0xffcc1100;
+	private static final int TEXT_COLOR_DEFAULT = 0xffeeee00;
+	private static final int TEXT_COLOR_DELAYED = 0xffffffff;
+	private static final int TEXT_COLOR_CANCELLED = 0xffaaaaaa;
+	
 	private static List<Map<String, Object>> mTransfers = new ArrayList<Map<String, Object>>();
 	private SimpleAdapter mTransfersAdapter;
 	private static String mStation;
@@ -78,12 +84,33 @@ public class StationActivity extends ListActivity {
         		case R.id.new_time:
         			// When there is a new time, make sure the old one is stroke through
     				ViewGroup parent = (ViewGroup) view.getParent();
+        			int textColor;
         			if (data != null) {
         				TextView timeView = (TextView) parent.findViewById(R.id.time);
         				SpannableString strike = new SpannableString(timeView.getText());
         			    strike.setSpan(new StrikethroughSpan(), 0, 5, 0); 
         				timeView.setText(strike, TextView.BufferType.SPANNABLE);
+        				try {
+        					parent.setBackgroundResource(R.drawable.row_delayed_background);
+        				}
+        				catch (Exception e) {
+        					parent.setBackgroundColor(BG_COLOR_DELAYED);
+        				}
+        				textColor = TEXT_COLOR_DELAYED;
+        			} else {
+        				try {
+        					parent.setBackgroundResource(R.drawable.row_background);
+        				}
+        				catch (Exception e) {
+        					parent.setBackgroundColor(BG_COLOR_DEFAULT);
+        				}
+        				textColor = TEXT_COLOR_DEFAULT;
         			}
+    				int childCount = parent.getChildCount();
+    				for (int i = 0; i < childCount; ++i) {
+    					TextView child = (TextView) parent.getChildAt(i);
+    					child.setTextColor(textColor);
+    				}
         			// Note! Fall through to next case
         		case R.id.time:
         			// Only show hour and minutes, e.g. 12:59
@@ -92,19 +119,15 @@ public class StationActivity extends ListActivity {
         			return true;
         		case R.id.track:
         			// Change text color if the train has been cancelled
-        			int color;
         			if (textRepresentation.length() == 0 || textRepresentation.equalsIgnoreCase("x")) {
-        				color = 0xffffffff;
-        				textRepresentation = "!!!";
-        			} else {
-        				color = 0xffeeee00;
+        				textRepresentation = "x";
+        				parent = (ViewGroup) view.getParent();
+        				childCount = parent.getChildCount();
+        				for (int i = 0; i < childCount; ++i) {
+        					TextView child = (TextView) parent.getChildAt(i);
+        					child.setTextColor(TEXT_COLOR_CANCELLED);
+        				}
         			}
-    				parent = (ViewGroup) view.getParent();
-    				int childCount = parent.getChildCount();
-    				for (int i = 0; i < childCount; ++i) {
-    					TextView child = (TextView) parent.getChildAt(i);
-    					child.setTextColor(color);
-    				}
         			textView = (TextView) view;
         			textView.setText(StringUtils.padLeft(textRepresentation, 4));
         			return true;

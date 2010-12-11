@@ -73,7 +73,7 @@
       android:text="Tidigare sökningar"
       android:textAppearance="@style/screen_title"
       android:padding="@dimen/padding"
-      android:background="#333"
+      android:background="@drawable/title_background"
     />
     
     <ListView
