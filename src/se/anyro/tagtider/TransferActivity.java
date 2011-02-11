@@ -225,8 +225,8 @@ public class TransferActivity extends ListActivity {
 		}
 		
 		String comment = extras.getString("comment");
-		if (comment == null || comment.length() == 0 && track.length() == 0)
-			comment = "Inställt"; // TODO: fix;
+		if ((comment == null || comment.length() == 0) && track.length() == 0)
+			comment = "Inställt";
 		if (comment != null && comment.length() > 0) {
 			commentView.setText(comment);
 			commentView.setVisibility(View.VISIBLE);
