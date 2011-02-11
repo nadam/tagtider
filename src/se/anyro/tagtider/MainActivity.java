@@ -19,15 +19,8 @@ package se.anyro.tagtider;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.methods.HttpGet;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -38,13 +31,11 @@ import se.anyro.tagtider.utils.RecentList;
 import se.anyro.tagtider.utils.StringUtils;
 import android.app.AlertDialog;
 import android.app.ListActivity;
-import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.AssetManager;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.view.View;
@@ -61,23 +52,26 @@ import android.widget.AdapterView.OnItemClickListener;
 
 public class MainActivity extends ListActivity {
 	
-    private AutoCompleteTextView mStationView;
+    private static final String LAST_VERSION_CODE = "last_version_code";
+	private AutoCompleteTextView mStationView;
     private Station[] mStations;
     private List<String> mStationNames = new ArrayList<String>();
-	private ProgressDialog mProgress;
 	private AlertDialog mMessageDialog;
 	private RecentList mRecentStations;
 	private ArrayAdapter<String> mRecentStationsAdapter;
 	private ArrayAdapter<String> mStationsAdapter;
+	private SharedPreferences preferences;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        preferences = PreferenceManager.getDefaultSharedPreferences(this);
+
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 
 		setContentView(R.layout.main);
-        
+
         loadStations();
         setupAutocompletion();
 		setupButtonActions();
@@ -85,7 +79,18 @@ public class MainActivity extends ListActivity {
 		loadRecentStations();
 		
 		Http.setVersionName(getVersionName());
+		
+		oneTimeNotify();
     }
+
+	private void oneTimeNotify() {
+		int lastVersionCode = preferences.getInt(LAST_VERSION_CODE, 0);
+		int versionCode = getVersionCode();
+		if (lastVersionCode < versionCode) {
+			showMessage(getString(R.string.one_time_notifier));
+			preferences.edit().putInt(LAST_VERSION_CODE, versionCode).commit();
+		}
+	}
 
 	private void loadStations() {
 
@@ -136,13 +141,19 @@ public class MainActivity extends ListActivity {
 				// Check if the user wrote a valid station
 				int selection = mStationNames.indexOf(mStationView.getText().toString());
 				if (selection >= 0) {
+					mRecentStations.addItem(mStationView.getText().toString());
+					
 					Station station = mStations[selection];
-					StationActivity.setStation(station.name);
 					String type = Station.DEPARTURES;
 					if (button == showArrivalsButton)
 						type = Station.ARRIVIALS;
-					StationActivity.setType(type);
-					new FetchTransfersTask().execute(Integer.toString(station.id), type);
+					
+					// Show the arrivals or departures at this station
+					Intent intent = new Intent(MainActivity.this, StationActivity.class);
+					intent.putExtra("stationName", station.name);
+					intent.putExtra("stationId", station.id);
+					intent.putExtra("type", type);
+					startActivity(intent);
 				}
 			}
 		};
@@ -152,14 +163,12 @@ public class MainActivity extends ListActivity {
 	}
 
 	private void setupDialogs() {
-		mProgress = new ProgressDialog(this);
 		mMessageDialog = new AlertDialog.Builder(this).setNeutralButton("Ok", null).create();
 	}
 
 	private void loadRecentStations() {
-		SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
 		mRecentStations = new RecentList(4, "recent_station", preferences);
-		mRecentStationsAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, mRecentStations.getList());
+		mRecentStationsAdapter = new ArrayAdapter<String>(this, R.layout.station_row, mRecentStations.getList());
 		setListAdapter(mRecentStationsAdapter);		
 	}
 	
@@ -168,86 +177,6 @@ public class MainActivity extends ListActivity {
     	super.onResume();
     	// Make sure the latest searched station is displayed
     	mRecentStationsAdapter.notifyDataSetChanged();
-    }
-    
-	/**
-	 * Class for fetching arrivals or departures for a specific station asynchronously
-	 */
-	private class FetchTransfersTask extends AsyncTask<String, String, String> {
-
-    	@Override
-    	protected void onPreExecute() {
-    		mProgress.setMessage("Hämtar data...");
-    		mProgress.show();
-    	}
-    	
-		@Override
-		protected String doInBackground(String... params) {
-			
-			String stationId = params[0];
-			String type = params[1];
-			
-			HttpGet httpGet = new HttpGet("http://api.tagtider.net/v1/stations/" + stationId + "/transfers/" + type + ".json");
-			httpGet.setHeader("User-Agent", Http.getUserAgent());
-			
-			try {
-				HttpResponse response = Http.getClient().execute(httpGet);
-				if (response.getStatusLine().getStatusCode() == 200) {
-					publishProgress("Bearbetar data...");
-					HttpEntity entity = response.getEntity();
-					InputStream content = entity.getContent();
-					
-					String json = StringUtils.readTextFile(content);
-					try {
-						JSONObject root = new JSONObject(json);
-						JSONObject station = root.getJSONObject("station");
-						JSONArray transfers = station.getJSONObject("transfers").getJSONArray("transfer");
-						StationActivity.clear();
-						for (int i = 0; i < transfers.length(); ++i) {
-							JSONObject transfer = transfers.getJSONObject(i);
-							@SuppressWarnings("unchecked")
-							Iterator keys = transfer.keys();
-							Map<String, Object> transferMap = new HashMap<String, Object>();
-							while (keys.hasNext()) {
-								Object key = keys.next();
-								Object value = transfer.get((String) key);
-								if (value == JSONObject.NULL)
-									value = null;
-								transferMap.put((String) key, value);
-							}
-							StationActivity.addTransfer(transferMap);
-						}
-						return null;
-					} catch (JSONException e) {
-						return "Tillfälligt fel i svaret";
-					}
-				}
-
-			} catch (ClientProtocolException e) {
-				return "Kommunikationsfel";
-			} catch (IOException e) {
-				return "Ingen kontakt";
-			}
-			return null;
-		}
-
-		@Override
-		protected void onProgressUpdate(String... values) {
-			mProgress.setMessage(values[0]);
-		}
-		
-		@Override
-		protected void onPostExecute(String errorMessage) {
-			mProgress.hide();
-			if (errorMessage == null) {
-				// Show the arrivals or departures at this station
-				Intent intent = new Intent(MainActivity.this, StationActivity.class);
-				startActivity(intent);
-			} else {
-				showMessage(errorMessage);
-			}
-			mRecentStations.addItem(mStationView.getText().toString());
-		}
     }
     
 	@Override
@@ -264,6 +193,15 @@ public class MainActivity extends ListActivity {
 		mMessageDialog.show();
 	}
 
+	private int getVersionCode() {
+		try {
+			PackageInfo mPackageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+			return mPackageInfo.versionCode;
+		} catch (NameNotFoundException e) {
+			return 0;
+		}
+	}
+	
 	private String getVersionName() {
 		try {
 			PackageInfo mPackageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);

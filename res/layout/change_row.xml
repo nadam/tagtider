@@ -20,7 +20,7 @@
   android:layout_height="wrap_content"
   android:padding="@dimen/change_padding"
   android:orientation="vertical"
-  >
+  android:background="@drawable/row_background">
     <TextView
       android:id="@+id/time"
       android:layout_width="wrap_content"

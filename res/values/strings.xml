@@ -21,7 +21,13 @@
     <string name="no_transfers">Hittar inga transfers</string>
     <string name="no_changes">Inga ändringar ännu</string>
     
+    <string name="one_time_notifier">Obs! Ny färgkodning. Röd betyder nu inställt tåg för att matcha tagtider.net.</string>
+    
+    <string name="c2dm_button">Bevakning...</string>
+    <string name="c2dm_dialog_title">Bevakning</string>
+    <string name="c2dm_dialog_message">Kostar ingenting och gör att du får notiser om någon ändring rapporteras. Kräver förstås att du har internetförbindelse.</string>
     <string name="sms_button">SMS-bevakning...</string>
     <string name="sms_dialog_title">SMS-bevakning</string>
-    <string name="sms_dialog_message">Kostar inte mer än ett SMS och gör att du får SMS skickat till dig om någon ändring rapporteras.</string>
+    <string name="sms_dialog_message">Kostar inte mer än ett SMS och gör att du får SMS om någon ändring rapporteras.</string>
+    <string name="sms_dialog_message_free">Kostar ingenting och gör att du får SMS skickat till %s om någon ändring rapporteras.</string>
 </resources>

@@ -16,7 +16,7 @@
 
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:layout_width="fill_parent"
-  android:layout_height="fill_parent"
+  android:layout_height="wrap_content"
   android:orientation="vertical"
   android:background="#000">
   
@@ -111,6 +111,22 @@
       android:padding="@dimen/padding"
     />
     
+    <Button
+      android:id="@+id/sms"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_gravity="center"
+      android:textAppearance="?android:attr/textAppearanceMedium"
+      android:text="@string/sms_button"/>
+      
+    <Button
+      android:id="@+id/c2dm"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_gravity="center"
+      android:textAppearance="?android:attr/textAppearanceMedium"
+      android:text="@string/c2dm_button"/>
+
     <TextView
       android:id="@+id/changes"
       android:layout_width="fill_parent"
@@ -121,13 +137,6 @@
       android:background="#444"
     />
     
-    <ListView
-      android:id="@android:id/list"
-      android:layout_width="fill_parent"
-      android:layout_height="wrap_content"
-      android:orientation="vertical"
-    />
-      
     <TextView
       android:id="@android:id/empty"
       android:layout_width="fill_parent"
@@ -137,14 +146,22 @@
       android:padding="@dimen/padding"
     />
     
-    <Button
-      android:id="@+id/sms"
+    <ProgressBar
+      android:id="@+id/progress"
       android:layout_width="wrap_content"
       android:layout_height="wrap_content"
       android:layout_gravity="center"
-      android:textAppearance="?android:attr/textAppearanceMedium"
-      android:text="@string/sms_button"/>
-
+      android:visibility="gone"
+      android:indeterminate="true"
+    />
+    
+    <ListView
+      android:id="@android:id/list"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:orientation="vertical"
+    />
+      
     <!--Button
       android:id="@+id/call"
       android:layout_width="wrap_content"

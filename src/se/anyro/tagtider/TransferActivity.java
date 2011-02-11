@@ -18,6 +18,7 @@ package se.anyro.tagtider;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -26,8 +27,12 @@ import java.util.Map;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
 import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.message.BasicNameValuePair;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -45,6 +50,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.telephony.gsm.SmsManager;
 import android.text.SpannableString;
@@ -61,20 +67,33 @@ import android.widget.SimpleAdapter.ViewBinder;
 @SuppressWarnings("deprecation")
 public class TransferActivity extends ListActivity {
 
-	private SimpleAdapter mChangesAdapter;
-	private List<Map<String, Object>> mChanges = new ArrayList<Map<String, Object>>();
+	private static String sLastTransferId;
+	private String mTrain, mStationId, mStationName, mTransferId;
+	private String mRegistrationId;
+	
+	private Bundle mNewExtras;
+	private static SimpleAdapter sChangesAdapter;
+	private static List<Map<String, Object>> sChanges = new ArrayList<Map<String, Object>>();
 
-	private final String SMS_SENT = "se.anyro.tagtider.SMS_SENT";
+	private static final String SMS_SENT = "se.anyro.tagtider.SMS_SENT";
     private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
-    private IntentFilter mSentFilter = new IntentFilter(SMS_SENT);
-	private ProgressDialog mProgress;
+    private IntentFilter mSmsSentFilter = new IntentFilter(SMS_SENT);
+	private ProgressDialog mProgressDialog;
+	private View mProgressBar;
 	private AlertDialog mDialog;
+	private String mPhoneNumber;
     
+	public static final String C2DM_REGISTERED = "se.anyro.tagtider.C2DM_REGISTERED";
+	private C2dmStatusReceiver mC2dmStatusReceiver = new C2dmStatusReceiver();
+	private IntentFilter mC2dmRegisteredFilter = new IntentFilter(C2DM_REGISTERED);
+	
 	// Display mapping from keys to view id:s
     private static final String[] FROM = {"detected", "comment", "other"};
-    private static final int[] TO = {R.id.time, R.id.comment, R.id.other};
-    
+    private static final int[] TO = {R.id.time, R.id.comment, R.id.other};    
 	private TextView mEmptyView;
+	
+	private static final String TYPE_AC2DM = "ac2dm";
+	private static final String TYPE_SMS = "sms";
     
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -84,12 +103,42 @@ public class TransferActivity extends ListActivity {
 		
 		setContentView(R.layout.transfer);
 		
+		// Use c2dm if we have Android 2.2
+        int sdkVersion = Integer.parseInt(Build.VERSION.SDK); // Cupcake style
+        if (sdkVersion >= Build.VERSION_CODES.FROYO + 10) { // TODO: Change when we want to use C2DM
+        	findViewById(R.id.sms).setVisibility(View.GONE);
+        } else {
+    		//TelephonyManager tm = (TelephonyManager) getSystemService(TELEPHONY_SERVICE);
+    		mPhoneNumber = null; // tm.getLine1Number(); TODO: Change when server supports this
+    		if (mPhoneNumber != null && mPhoneNumber.length() == 0)
+    			mPhoneNumber = null;
+        	findViewById(R.id.c2dm).setVisibility(View.GONE);
+        }
+		
+        mProgressBar = findViewById(R.id.progress);
+        
 		setupTransferData(getIntent().getExtras());
 		
-		mProgress = new ProgressDialog(this);
-		mDialog = new AlertDialog.Builder(this).setNeutralButton("Ok", null).create();
+		setupDialogs();
+		
+		if (!mTransferId.equals(sLastTransferId)) {
+			// Fetch additional data about changes made to this transfer
+			new FetchChangesTask().execute(mTransferId);
+			sLastTransferId = mTransferId;
+		} else if (sChanges.size() > 0) {
+			addChangesAdapter();
+		}
 	}
 
+	@Override
+	protected void onNewIntent(Intent intent) {
+		Bundle extras = intent.getExtras();
+		if (extras.getString("id") != null) {
+			mTransferId = extras.getString("id");
+		}
+		new FetchChangesTask().execute(mTransferId);
+	}
+	
 	private void setupTransferData(final Bundle extras) {
 		TextView trainView = (TextView) findViewById(R.id.train);
 		
@@ -109,7 +158,7 @@ public class TransferActivity extends ListActivity {
 		trainView.setText("Tåg " + extras.getString("train") + " (" + extras.getString("type") + ")");
 
 		String origin = extras.getString("origin");
-		if (origin != null) {
+		if (origin != null && origin.length() > 0) {
 			originView.setText("Från " + origin);
 			originGroup.setVisibility(View.VISIBLE);
 		} else {
@@ -121,7 +170,7 @@ public class TransferActivity extends ListActivity {
 			track = "";
 		
 		String arrival = extras.getString("arrival");
-		if (arrival != null) { 
+		if (arrival != null && !arrival.startsWith("0000")) { 
 			arrivalView.setText("Ankommer " + StringUtils.extractTime(arrival));
 			String newArrival = extras.getString("newArrival"); 
 			if (newArrival != null) {
@@ -137,13 +186,21 @@ public class TransferActivity extends ListActivity {
 			}
 		}
 
-		if (track.length() > 0)
-			stationTrackView.setText(extras.getString("station") + ", spår " +  track);
+		if (extras.getString("stationName") != null) {
+			mStationName = extras.getString("stationName");
+		}
+		
+		if (track.length() > 0 && mStationName != null)
+			stationTrackView.setText(mStationName + ", spår " +  track);
+		else if (mStationName != null)
+			stationTrackView.setText(mStationName);
+		else if (track.length() > 0)
+			stationTrackView.setText("Spår " + track);
 		else
-			stationTrackView.setText(extras.getString("station"));
+			stationTrackView.setText("");
 
 		String destination = extras.getString("destination");
-		if (destination != null) {
+		if (destination != null && destination.length() > 0) {
 			destinationView.setText("Till " + destination);
 			destinationGroup.setVisibility(View.VISIBLE);
 		} else {
@@ -151,7 +208,7 @@ public class TransferActivity extends ListActivity {
 		}
 	
 		String departure = extras.getString("departure");
-		if (departure != null) {
+		if (departure != null && !departure.startsWith("0000")) {
 			departureView.setText("Avgår " + StringUtils.extractTime(departure));
 			String newDeparture = extras.getString("newDeparture"); 
 			if (newDeparture != null) {
@@ -168,17 +225,23 @@ public class TransferActivity extends ListActivity {
 		}
 		
 		String comment = extras.getString("comment");
-		if (comment != null) {
+		if (comment == null || comment.length() == 0 && track.length() == 0)
+			comment = "Inställt"; // TODO: fix;
+		if (comment != null && comment.length() > 0) {
 			commentView.setText(comment);
 			commentView.setVisibility(View.VISIBLE);
 		} else {
 			commentView.setVisibility(View.GONE);
 		}
 		
-		final String train = extras.getString("train");
-		final String station = extras.getString("station");
-		final AlertDialog smsDialog = createSmsDialog(train, station);
+		mTrain = extras.getString("train");
+		mStationId = extras.getString("stationId");
 		
+		mTransferId = extras.getString("id");
+	}
+	
+	private void setupDialogs() {
+		final AlertDialog smsDialog = createSmsDialog();		
 		Button sendSmsButton = (Button) findViewById(R.id.sms);
 		sendSmsButton.setOnClickListener(new OnClickListener() {
 			@Override
@@ -186,19 +249,36 @@ public class TransferActivity extends ListActivity {
 				smsDialog.show();
 			}
 		});
-
-		// Fetch additional data about changes made to this transfer
-		new FetchChangesTask().execute(extras.getString("id"));
+		
+		final AlertDialog c2dmDialog = createC2dmDialog();
+		Button sendC2dmButton = (Button) findViewById(R.id.c2dm);
+		sendC2dmButton.setOnClickListener(new OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				c2dmDialog.show();
+			}
+		});
+		
+		mProgressDialog = new ProgressDialog(this);
+		mDialog = new AlertDialog.Builder(this).setNeutralButton("Ok", null).create();
 	}
 
-	private AlertDialog createSmsDialog(final String train, final String station) {
+	private AlertDialog createSmsDialog() {		
 		AlertDialog.Builder builder = new AlertDialog.Builder(this);
 		builder.setTitle(R.string.sms_dialog_title);
-		builder.setMessage(R.string.sms_dialog_message);
+		if (mPhoneNumber == null) {
+			builder.setMessage(R.string.sms_dialog_message);
+		} else {
+			builder.setMessage(String.format(getString(R.string.sms_dialog_message_free), mPhoneNumber));
+		}
 		builder.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
-				sendSms("0730121096", train + " " + station);
+				if (mPhoneNumber == null) {
+					sendSms("0730121096", mTrain + " " + mStationId);
+				} else {
+					new StartSubscriptionTask().execute(mPhoneNumber, TYPE_SMS);
+				}					
 			}
 		});
 		builder.setNegativeButton("Avbryt", null);
@@ -206,24 +286,28 @@ public class TransferActivity extends ListActivity {
 		return smsDialog;
 	}	
 	
-	private AlertDialog createNotificationDialog(final String train, final String station) {
+	private AlertDialog createC2dmDialog() {
 		AlertDialog.Builder builder = new AlertDialog.Builder(this);
-		builder.setTitle(R.string.sms_dialog_title);
-		builder.setMessage(R.string.sms_dialog_message);
+		builder.setTitle(R.string.c2dm_dialog_title);
+		builder.setMessage(R.string.c2dm_dialog_message);
 		builder.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
-				sendSms("0730121096", train + " " + station);
+				if (mRegistrationId == null) {
+					registerC2dm();
+				} else {
+					new StartSubscriptionTask().execute(mRegistrationId, TYPE_AC2DM);
+				}
 			}
 		});
 		builder.setNegativeButton("Avbryt", null);
 		final AlertDialog smsDialog = builder.create();
 		return smsDialog;
-	}
+	}	
 	
-	private void addAdapter() {
-        mChangesAdapter = new SimpleAdapter(this, mChanges, R.layout.change_row, FROM, TO);
-        mChangesAdapter.setViewBinder(new ViewBinder() {
+	private void addChangesAdapter() {
+        sChangesAdapter = new SimpleAdapter(this, sChanges, R.layout.change_row, FROM, TO);
+        sChangesAdapter.setViewBinder(new ViewBinder() {
         	public boolean setViewValue(View view, Object data, String textRepresentation) {
         		// Hide views with empty text
         		if (textRepresentation.length() == 0) {
@@ -235,7 +319,7 @@ public class TransferActivity extends ListActivity {
         		return false;
         	}
         });
-        setListAdapter(mChangesAdapter);
+        setListAdapter(sChangesAdapter);
 	}
 	
     /**
@@ -246,6 +330,7 @@ public class TransferActivity extends ListActivity {
     	@Override
     	protected void onPreExecute() {
     		mEmptyView.setText("Hämtar ändringar...");
+    		mProgressBar.setVisibility(View.VISIBLE);
     	}
     	
 		@Override
@@ -271,11 +356,31 @@ public class TransferActivity extends ListActivity {
 					JSONObject root = new JSONObject(json);
 					
 					JSONObject transfer = root.getJSONObject("transfer");
+					
+					@SuppressWarnings("unchecked")
+					Iterator transferKeys = transfer.keys();
+					mNewExtras = new Bundle();
+					while (transferKeys.hasNext()) {
+						Object key = transferKeys.next();
+						Object value = transfer.get((String) key);
+						if (value == JSONObject.NULL)
+							value = null;
+						if (value instanceof String)
+							mNewExtras.putString((String) key, (String) value);
+					}
+					
 					if (!transfer.has("changes"))
 						return "Inga ändringar ännu";
 					JSONArray changes = transfer.getJSONObject("changes").getJSONArray("change");
 
-					for (int i = 0; i < changes.length(); ++i) {
+					int maxChanges = changes.length();
+					if (maxChanges > 3) {
+						maxChanges = 3;
+					}
+					
+					sChanges.clear();
+					
+					for (int i = 0; i < maxChanges; ++i) {
 						JSONObject change = changes.getJSONObject(i);
 						@SuppressWarnings("unchecked")
 						Iterator keys = change.keys();
@@ -308,7 +413,7 @@ public class TransferActivity extends ListActivity {
 						
 						String[] other = new String[]{track, arrival, departure};
 						changeMap.put("other", StringUtils.join(other, ", "));
-						mChanges.add(changeMap);
+						sChanges.add(changeMap);
 					}
 					return null;
 				} catch (JSONException e) {
@@ -324,17 +429,133 @@ public class TransferActivity extends ListActivity {
 		
 		@Override
 		protected void onPostExecute(String result) {
-			if (result == null) {
-				addAdapter();
+			
+    		mProgressBar.setVisibility(View.GONE);
+			
+    		if (result == null) {
+				addChangesAdapter();
+				if (mNewExtras != null) {
+					setupTransferData(mNewExtras);
+				}
 			} else {
 				mEmptyView.setText(result);
 			}
 		}
     }
     
+    /**
+     * Class for sending message to server to start subscription
+     */
+    private class StartSubscriptionTask extends AsyncTask<String, String, String> {
+
+    	@Override
+    	protected void onPreExecute() {
+    		mProgressDialog.setMessage("Registrerar bevakning...");
+    		mProgressDialog.show();
+    	}
+    	
+		@Override
+		protected String doInBackground(String... params) {
+			
+			String id = params[0];
+			String type = params[1];
+			
+			HttpPost httpPost = new HttpPost("http://api.tagtider.net/v1/subscriptions.json?device_token=" + id);
+			final List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>();
+			nameValuePairs.add(new BasicNameValuePair("train", mTrain));
+			nameValuePairs.add(new BasicNameValuePair("station", mStationId));
+//			nameValuePairs.add(new BasicNameValuePair("date", value));
+			nameValuePairs.add(new BasicNameValuePair("type", type));
+	        HttpEntity postEntity = null;
+	        try {
+	            postEntity = new UrlEncodedFormEntity(nameValuePairs);
+	        } catch (final UnsupportedEncodingException e) {
+	            // this should never happen.
+	            throw new AssertionError(e);
+	        }
+	        httpPost.setEntity(postEntity);
+	        httpPost.setHeader(postEntity.getContentType());
+			httpPost.setHeader("User-Agent", Http.getUserAgent());
+			
+			try {
+				HttpResponse response = Http.getClient().execute(httpPost);
+				int statusCode = response.getStatusLine().getStatusCode();
+				if (statusCode != 200)
+					return "Tillfälligt fel " + statusCode + " :-(";
+
+				HttpEntity entity = response.getEntity();
+				InputStream content = entity.getContent();
+				
+				String json = StringUtils.readTextFile(content);
+				try {
+					// Parse json response into objects
+					JSONObject root = new JSONObject(json);
+					
+/*					JSONObject transfer = root.getJSONObject("transfer");
+					if (!transfer.has("changes"))
+						return "Inga ändringar ännu";
+					JSONArray changes = transfer.getJSONObject("changes").getJSONArray("change");
+
+					int maxChanges = changes.length();
+					if (maxChanges > 3) {
+						maxChanges = 3;
+					}*/
+					
+					return null;
+				} catch (JSONException e) {
+					return "Tillfälligt fel";
+				}
+
+			} catch (ClientProtocolException e) {
+				return "Kommunikationsfel";
+			} catch (IOException e) {
+				return "Ingen kontakt";
+			}
+		}
+		
+		@Override
+		protected void onPostExecute(String result) {
+			mProgressDialog.hide();
+			if (result != null) {
+				showMessage("Problem", result);
+			}
+		}
+    }
+    
+	private void registerC2dm() {
+		mProgressDialog.setMessage("Initierar bevakning...");
+		mProgressDialog.show();
+		
+        registerReceiver(mC2dmStatusReceiver, mC2dmRegisteredFilter);
+
+		Intent registrationIntent = new Intent("com.google.android.c2dm.intent.REGISTER");
+		registrationIntent.putExtra("app", PendingIntent.getBroadcast(this, 0, new Intent(), 0));
+		registrationIntent.putExtra("sender", "tagtider@gmail.com");
+		startService(registrationIntent);
+	}
+	
+    private class C2dmStatusReceiver extends BroadcastReceiver {
+    	
+        @Override
+        public void onReceive(Context context, Intent intent) {
+        	
+        	if (intent.getAction().equals(C2DM_REGISTERED)) {
+        		String error = intent.getStringExtra("error");
+        		if (error != null) {
+            		mProgressDialog.hide();
+        			showMessage("Problem", error);
+        		} else {
+        			mRegistrationId = intent.getStringExtra("registrationId");
+					new StartSubscriptionTask().execute(mRegistrationId, TYPE_AC2DM);
+        		}
+            	unregisterReceiver(mC2dmStatusReceiver);
+        	}
+        }
+    }
+
 	private void sendSms(String phoneNumber, String message) {
 		 
-        registerReceiver(mSmsStatusReceiver, mSentFilter);
+        registerReceiver(mSmsStatusReceiver, mSmsSentFilter);
 
         PendingIntent sentIntent = PendingIntent.getBroadcast(this, 0, new Intent(SMS_SENT), 0);
  
@@ -344,8 +565,8 @@ public class TransferActivity extends ListActivity {
         SmsManager sms = SmsManager.getDefault();
         ArrayList<String> smstext = sms.divideMessage(message);
         
-		mProgress.setMessage("Hämtar data...");
-		mProgress.show();
+		mProgressDialog.setMessage("Skickar SMS...");
+		mProgressDialog.show();
 
         // Using multipart as a work-around for a bug in HTC Tattoo
         sms.sendMultipartTextMessage(phoneNumber, null, smstext, sentIntents, null);
@@ -364,7 +585,7 @@ public class TransferActivity extends ListActivity {
 
 		private void onSmsSent() {
 
-			mProgress.hide();
+			mProgressDialog.hide();
 
 			String error = null;
 			switch (getResultCode()) {

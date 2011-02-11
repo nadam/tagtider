@@ -16,14 +16,28 @@
 
 package se.anyro.tagtider;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.methods.HttpGet;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import se.anyro.tagtider.model.Station;
+import se.anyro.tagtider.utils.Http;
 import se.anyro.tagtider.utils.StringUtils;
 import android.app.ListActivity;
 import android.content.Intent;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.style.StrikethroughSpan;
@@ -40,22 +54,74 @@ import android.widget.SimpleAdapter.ViewBinder;
  */
 public class StationActivity extends ListActivity {
 
-	private static final int BG_COLOR_DEFAULT = 0xff000000;
-	private static final int BG_COLOR_DELAYED = 0xffcc1100;
+	private static final int FIVE_MINUTES = 300000;
 	private static final int TEXT_COLOR_DEFAULT = 0xffeeee00;
-	private static final int TEXT_COLOR_DELAYED = 0xffffffff;
-	private static final int TEXT_COLOR_CANCELLED = 0xffaaaaaa;
+	private static final int TEXT_COLOR_ALERT = 0xffffffff;
 	
-	private static List<Map<String, Object>> mTransfers = new ArrayList<Map<String, Object>>();
-	private SimpleAdapter mTransfersAdapter;
-	private static String mStation;
-	private static String mType;
+	private static long sLastUpdate = 0;
+	
+	private static List<Map<String, Object>> sTransfers = new ArrayList<Map<String, Object>>();
+	private static SimpleAdapter sTransfersAdapter;
+	
+	private static int sLastStationId;
+	private static String sLastType;
+	
+	private String mStationName;
+	private int mStationId;
+	private String mType;
+	private TextView mEmptyView;
+	private View mProgress;
 	
     // Display mapping from keys to view id:s
     private static final String[] FROM_DEPARTURE = {"departure", "destination", "newDeparture", "track"};
     private static final String[] FROM_ARRIVAL = {"arrival", "origin", "newArrival", "track"};
     private static final int[] TO = {R.id.time, R.id.destination, R.id.new_time, R.id.track};
-	
+    private String[] mFrom;
+    
+    private ViewBinder viewBinder = new ViewBinder() {
+    	public boolean setViewValue(View view, Object data, String textRepresentation) {
+    		switch (view.getId()) {
+    		case R.id.new_time:
+    			// When there is a new time, make sure the old one is stroke through
+				ViewGroup parent = (ViewGroup) view.getParent();
+    			int textColor;
+    			if (data != null) {
+    				TextView timeView = (TextView) parent.findViewById(R.id.time);
+    				SpannableString strike = new SpannableString(timeView.getText());
+    			    strike.setSpan(new StrikethroughSpan(), 0, 5, 0); 
+    				timeView.setText(strike, TextView.BufferType.SPANNABLE);
+    			}
+    			// Note! Fall through to next case
+    		case R.id.time:
+    			// Only show hour and minutes, e.g. 12:59
+    			TextView textView = (TextView) view;
+    			textView.setText(StringUtils.extractTime(textRepresentation));
+    			return true;
+    		case R.id.track:
+				parent = (ViewGroup) view.getParent();
+    			// Change text color if the train has been cancelled
+    			if (textRepresentation.length() == 0 || textRepresentation.equalsIgnoreCase("x")) {
+    				textRepresentation = "-";
+					parent.setBackgroundResource(R.drawable.row_cancelled_background);
+					textColor = TEXT_COLOR_ALERT;
+    			} else {
+					parent.setBackgroundResource(R.drawable.row_background);
+					textColor = TEXT_COLOR_DEFAULT;
+    			}
+				int childCount = parent.getChildCount();
+				for (int i = 0; i < childCount; ++i) {
+					TextView child = (TextView) parent.getChildAt(i);
+					if (child.getId() != R.id.new_time)
+						child.setTextColor(textColor);
+				}
+    			textView = (TextView) view;
+    			textView.setText(StringUtils.padLeft(textRepresentation, 4));
+    			return true;
+    		}
+    		return false;
+    	}
+    };
+    
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -63,106 +129,148 @@ public class StationActivity extends ListActivity {
 		requestWindowFeature(Window.FEATURE_NO_TITLE);
 
 		setContentView(R.layout.transfers);
+
+		Bundle extras = getIntent().getExtras();
 		
+		mStationName = extras.getString("stationName");
+		mStationId = extras.getInt("stationId");
+		mType = extras.getString("type");
+		
+		if (!mType.equals(sLastType) || mStationId != sLastStationId)
+			sLastUpdate = 0; // Make sure we reload the data
+		
+		sLastStationId = mStationId;
+		sLastType = mType;
+
 		TextView title = (TextView) findViewById(R.id.title);
 		TextView place = (TextView) findViewById(R.id.place);
-		String[] from;
-		if (mType == Station.ARRIVIALS) {
-			title.setText(mStation + " - Ankomster");
-			from = FROM_ARRIVAL;
+		if (Station.ARRIVIALS.equals(mType)) {
+			title.setText(mStationName + " - Ankomster");
+			mFrom = FROM_ARRIVAL;
 			place.setText("Från");
 		} else {
-			title.setText(mStation + " - Avgångar");
-			from = FROM_DEPARTURE;
+			title.setText(mStationName + " - Avgångar");
+			mFrom = FROM_DEPARTURE;
 			place.setText("Till");
 		}
-		
-        mTransfersAdapter = new SimpleAdapter(this, mTransfers, R.layout.transfer_row, from, TO);
-        mTransfersAdapter.setViewBinder(new ViewBinder() {
-        	public boolean setViewValue(View view, Object data, String textRepresentation) {
-        		switch (view.getId()) {
-        		case R.id.new_time:
-        			// When there is a new time, make sure the old one is stroke through
-    				ViewGroup parent = (ViewGroup) view.getParent();
-        			int textColor;
-        			if (data != null) {
-        				TextView timeView = (TextView) parent.findViewById(R.id.time);
-        				SpannableString strike = new SpannableString(timeView.getText());
-        			    strike.setSpan(new StrikethroughSpan(), 0, 5, 0); 
-        				timeView.setText(strike, TextView.BufferType.SPANNABLE);
-        				try {
-        					parent.setBackgroundResource(R.drawable.row_delayed_background);
-        				}
-        				catch (Exception e) {
-        					parent.setBackgroundColor(BG_COLOR_DELAYED);
-        				}
-        				textColor = TEXT_COLOR_DELAYED;
-        			} else {
-        				try {
-        					parent.setBackgroundResource(R.drawable.row_background);
-        				}
-        				catch (Exception e) {
-        					parent.setBackgroundColor(BG_COLOR_DEFAULT);
-        				}
-        				textColor = TEXT_COLOR_DEFAULT;
-        			}
-    				int childCount = parent.getChildCount();
-    				for (int i = 0; i < childCount; ++i) {
-    					TextView child = (TextView) parent.getChildAt(i);
-    					child.setTextColor(textColor);
-    				}
-        			// Note! Fall through to next case
-        		case R.id.time:
-        			// Only show hour and minutes, e.g. 12:59
-        			TextView textView = (TextView) view;
-        			textView.setText(StringUtils.extractTime(textRepresentation));
-        			return true;
-        		case R.id.track:
-        			// Change text color if the train has been cancelled
-        			if (textRepresentation.length() == 0 || textRepresentation.equalsIgnoreCase("x")) {
-        				textRepresentation = "x";
-        				parent = (ViewGroup) view.getParent();
-        				childCount = parent.getChildCount();
-        				for (int i = 0; i < childCount; ++i) {
-        					TextView child = (TextView) parent.getChildAt(i);
-        					child.setTextColor(TEXT_COLOR_CANCELLED);
-        				}
-        			}
-        			textView = (TextView) view;
-        			textView.setText(StringUtils.padLeft(textRepresentation, 4));
-        			return true;
-        		}
-        		return false;
-        	}
-        });
-        setListAdapter(mTransfersAdapter);
+		mEmptyView = (TextView) findViewById(android.R.id.empty);
+		mProgress = findViewById(R.id.progress);
 	}
 
+	@Override
+	protected void onResume() {
+		super.onResume();
+		
+		long timeSinceLastUpdate = System.currentTimeMillis() - sLastUpdate;
+		if (timeSinceLastUpdate > FIVE_MINUTES) {
+			new FetchTransfersTask().execute(Integer.toString(mStationId), mType);
+			sLastUpdate = System.currentTimeMillis();
+		} else if (getListAdapter() == null) {
+			addAdapter();
+		}
+	}
+	
 	@Override
 	protected void onListItemClick(ListView l, View v, int position, long id) {
 		// Start the transfer activity
 		Intent intent = new Intent(this, TransferActivity.class);
-		intent.putExtra("station", mStation);
-		Map<String, Object> transfer = mTransfers.get(position);
+		intent.putExtra("stationName", mStationName);
+		intent.putExtra("stationId", mStationId);
+		Map<String, Object> transfer = sTransfers.get(position);
 		for (Map.Entry<String, Object> entry : transfer.entrySet()) {
-			intent.putExtra(entry.getKey(), (String) entry.getValue());
+			String key = entry.getKey();
+			String value = (String) entry.getValue();
+			intent.putExtra(key, value);
 		}
 		startActivity(intent);
 	}
 
-	public static void setStation(String station) {
-		mStation = station;
-	}
+	/**
+	 * Class for fetching arrivals or departures for a specific station asynchronously
+	 */
+	private class FetchTransfersTask extends AsyncTask<String, String, String> {
+
+    	@Override
+    	protected void onPreExecute() {
+    		
+    		if (Station.ARRIVIALS.equals(mType)) {
+    			mEmptyView.setText("Hämtar ankomster...");
+    		} else {
+    			mEmptyView.setText("Hämtar avgångar...");
+    		}
+    		
+    		mProgress.setVisibility(View.VISIBLE);
+    	}
+    	
+		@Override
+		protected String doInBackground(String... params) {
+			
+			String stationId = params[0];
+			String type = params[1];
+			
+			HttpGet httpGet = new HttpGet("http://api.tagtider.net/v1/stations/" + stationId + "/transfers/" + type + ".json");
+			httpGet.setHeader("User-Agent", Http.getUserAgent());
+			
+			try {
+				HttpResponse response = Http.getClient().execute(httpGet);
+				if (response.getStatusLine().getStatusCode() == 200) {
+					publishProgress("Bearbetar data...");
+					HttpEntity entity = response.getEntity();
+					InputStream content = entity.getContent();
+					
+					String json = StringUtils.readTextFile(content);
+					try {
+						JSONObject root = new JSONObject(json);
+						JSONObject station = root.getJSONObject("station");
+						JSONArray transfers = station.getJSONObject("transfers").getJSONArray("transfer");
+						sTransfers.clear();
+						for (int i = 0; i < transfers.length(); ++i) {
+							JSONObject transfer = transfers.getJSONObject(i);
+							@SuppressWarnings("unchecked")
+							Iterator keys = transfer.keys();
+							Map<String, Object> transferMap = new HashMap<String, Object>();
+							while (keys.hasNext()) {
+								Object key = keys.next();
+								Object value = transfer.get((String) key);
+								if (value == JSONObject.NULL)
+									value = null;
+								transferMap.put((String) key, value);
+							}
+							sTransfers.add(transferMap);
+						}
+						return null;
+					} catch (JSONException e) {
+						return "Tillfälligt fel i svaret";
+					}
+				}
+
+			} catch (ClientProtocolException e) {
+				return "Kommunikationsfel";
+			} catch (IOException e) {
+				return "Ingen kontakt";
+			}
+			return null;
+		}
+
+		@Override
+		protected void onProgressUpdate(String... values) {
+			mEmptyView.setText(values[0]);
+		}
+		
+		@Override
+		protected void onPostExecute(String errorMessage) {
+			mProgress.setVisibility(View.GONE);
+			if (errorMessage == null) {
+				addAdapter();
+			} else {
+				mEmptyView.setText(errorMessage);
+			}
+		}
+    }
 	
-	public static void addTransfer(Map<String, Object> transfer) {
-		mTransfers.add(transfer);
-	}
-
-	public static void clear() {
-		mTransfers.clear();
-	}
-
-	public static void setType(String type) {
-		mType = type;
+	private void addAdapter() {
+        sTransfersAdapter = new SimpleAdapter(this, sTransfers, R.layout.transfer_row, mFrom, TO);
+        sTransfersAdapter.setViewBinder(viewBinder);
+        setListAdapter(sTransfersAdapter);
 	}
 }
