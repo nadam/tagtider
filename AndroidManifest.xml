@@ -16,8 +16,8 @@
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
       package="se.anyro.tagtider"
-      android:versionCode="7"
-      android:versionName="1.4">
+      android:versionCode="8"
+      android:versionName="1.5">
 
     <supports-screens
       android:largeScreens="true"

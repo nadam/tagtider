@@ -85,10 +85,9 @@ public class MainActivity extends ListActivity {
 
 	private void oneTimeNotify() {
 		int lastVersionCode = preferences.getInt(LAST_VERSION_CODE, 0);
-		int versionCode = getVersionCode();
-		if (lastVersionCode < versionCode) {
+		if (lastVersionCode < 7) {
 			showMessage(getString(R.string.one_time_notifier));
-			preferences.edit().putInt(LAST_VERSION_CODE, versionCode).commit();
+			preferences.edit().putInt(LAST_VERSION_CODE, 7).commit();
 		}
 	}
 
