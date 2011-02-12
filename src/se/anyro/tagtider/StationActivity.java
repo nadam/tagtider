@@ -136,11 +136,11 @@ public class StationActivity extends ListActivity {
 		mStationId = extras.getInt("stationId");
 		mType = extras.getString("type");
 		
-		if (!mType.equals(sLastType) || mStationId != sLastStationId)
+		if (!mType.equals(sLastType) || mStationId != sLastStationId) {
 			sLastUpdate = 0; // Make sure we reload the data
-		
-		sLastStationId = mStationId;
-		sLastType = mType;
+			sLastStationId = mStationId;
+			sLastType = mType;
+		}
 
 		TextView title = (TextView) findViewById(R.id.title);
 		TextView place = (TextView) findViewById(R.id.place);
@@ -161,13 +161,14 @@ public class StationActivity extends ListActivity {
 	protected void onResume() {
 		super.onResume();
 		
+		if (getListAdapter() == null) {
+			addAdapter();
+		}
+		
 		long timeSinceLastUpdate = System.currentTimeMillis() - sLastUpdate;
 		if (timeSinceLastUpdate > FIVE_MINUTES) {
 			new FetchTransfersTask().execute(Integer.toString(mStationId), mType);
-			sLastUpdate = System.currentTimeMillis();
-		} else if (getListAdapter() == null) {
-			addAdapter();
-		}
+		} 
 	}
 	
 	@Override
@@ -262,8 +263,11 @@ public class StationActivity extends ListActivity {
 			mProgress.setVisibility(View.GONE);
 			if (errorMessage == null) {
 				addAdapter();
+				sLastUpdate = System.currentTimeMillis();
 			} else {
 				mEmptyView.setText(errorMessage);
+				deleteAdapter();
+				sLastUpdate = 0;
 			}
 		}
     }
@@ -272,5 +276,10 @@ public class StationActivity extends ListActivity {
         sTransfersAdapter = new SimpleAdapter(this, sTransfers, R.layout.transfer_row, mFrom, TO);
         sTransfersAdapter.setViewBinder(viewBinder);
         setListAdapter(sTransfersAdapter);
+	}
+	
+	private void deleteAdapter() {
+		sTransfers.clear();
+		setListAdapter(null);
 	}
 }

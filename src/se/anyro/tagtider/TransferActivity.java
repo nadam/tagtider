@@ -67,6 +67,9 @@ import android.widget.SimpleAdapter.ViewBinder;
 @SuppressWarnings("deprecation")
 public class TransferActivity extends ListActivity {
 
+	private static final int FIVE_MINUTES = 300000;
+	private static long sLastUpdate = 0;
+
 	private static String sLastTransferId;
 	private String mTrain, mStationId, mStationName, mTransferId;
 	private String mRegistrationId;
@@ -122,14 +125,26 @@ public class TransferActivity extends ListActivity {
 		setupDialogs();
 		
 		if (!mTransferId.equals(sLastTransferId)) {
-			// Fetch additional data about changes made to this transfer
-			new FetchChangesTask().execute(mTransferId);
+			sLastUpdate = 0;
 			sLastTransferId = mTransferId;
-		} else if (sChanges.size() > 0) {
-			addChangesAdapter();
 		}
 	}
-
+ 
+	@Override
+	protected void onResume() {
+		super.onResume();
+		
+		if (getListAdapter() == null) {
+			addChangesAdapter();
+		}
+		
+		long timeSinceLastUpdate = System.currentTimeMillis() - sLastUpdate;
+		if (timeSinceLastUpdate > FIVE_MINUTES) {
+			// Fetch additional data about changes made to this transfer
+			new FetchChangesTask().execute(mTransferId);
+		}
+	}
+	
 	@Override
 	protected void onNewIntent(Intent intent) {
 		Bundle extras = intent.getExtras();
@@ -322,6 +337,11 @@ public class TransferActivity extends ListActivity {
         setListAdapter(sChangesAdapter);
 	}
 	
+	private void deleteChangesAdapter() {
+		sChanges.clear();
+		setListAdapter(null);
+	}
+	
     /**
      * Class for fetching transfer changes asynchronously
      */
@@ -433,12 +453,15 @@ public class TransferActivity extends ListActivity {
     		mProgressBar.setVisibility(View.GONE);
 			
     		if (result == null) {
+				sLastUpdate = System.currentTimeMillis();
 				addChangesAdapter();
 				if (mNewExtras != null) {
 					setupTransferData(mNewExtras);
 				}
 			} else {
 				mEmptyView.setText(result);
+				deleteChangesAdapter();
+				sLastUpdate = 0;
 			}
 		}
     }
